@@ -1,0 +1,82 @@
+---
+title: "my-vignette"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{my-vignette}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+```{r setup, message=FALSE}
+library(blblm)
+library(tidyverse)
+```
+
+The original package from Randy can only use one worker or cpu to do the bag of little bootstraps algorithm. That's slow when we run everything in queue mode. In this new package, we extend the functionality of his original version. The new pacakge is not only allowed for parallel computing, but also allow user to provide just file names istead of entire files. Without further delay, let's start to instroduce our new package. 
+
+As we know, the orignial package allows us to run bag of little bootstraps algorithm with one worker. Now, we want to test does it still work. Here, we are going to use the build in R data `cars` to test the model. This dataset is very simple. It only has two columns. The first column is speed and the second column is distance. Generally, people can use this dataset to study simple linear regression. Now, let's set we want to split this dataset to 5 parts, and each part, we will do 100 times bootstrap resampling. 
+
+```{r}
+blblm_fit <- blblm(speed ~ dist, data = cars, m = 5, B = 100)
+```
+
+Here, we can also try whether the method functions work or not. 
+
+```{r}
+coef(blblm_fit)
+```
+
+```{r}
+print(blblm_fit)
+```
+
+```{r}
+confint(blblm_fit)
+```
+
+That's good, all the method functions from original packages seem to work here. Now, we are going to test our new features. First, let's test the data entrance method. Randy's package allows users to specify a dataframe only. Now, we add another method. When user provide a vector of characters to `data`, the function will consider those character strings are file names. Then, it will pass the file names to each cluster and read the data inside the cluster to avoid data footprint. 
+
+```{r}
+file_data = vector("list",10)
+for (i in 1:10){
+  ind = sample(1:nrow(cars), nrow(cars), replace = TRUE)
+  newdata <- cars[ind,]
+  row.names(newdata) <- NULL
+  file_data[[i]] <- newdata
+}
+
+for (i in 1:10){
+  write.csv(file_data[[i]], paste0("file",i,".csv"))
+}
+
+blblm_fit <- blblm(speed ~ dist, data = paste0("file",1:10,".csv"), m = 5, B = 100)
+coef(blblm_fit)
+```
+
+It works. Next, we are going to test the parallel feature. First, we test the feature when we provide one big data frame.
+
+```{r}
+blblm_fit <- blblm(speed ~ dist, data = cars, m = 5, B = 100, num_worker = 2)
+coef(blblm_fit)
+```
+
+It works fine. Now, we are going to provide a list of csv names and specify to use parallel with 3 cores to run. 
+
+```{r}
+blblm_fit <- blblm(speed ~ dist, data = paste0("file",1:10,".csv"), m = 5, B = 100, num_worker = 3)
+coef(blblm_fit)
+```
+
+All methods works fine now. 
+
+```{r}
+sigma(blblm_fit)
+file.remove(paste0("file",1:10,".csv"))
+```
